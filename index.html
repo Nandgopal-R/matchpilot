@@ -65,10 +65,12 @@
   </div>
 
   <script>
-    // --- FILL THESE IN BEFORE DEPLOYING! ---
+    // --- API URLs ---
     const MATCH_API_URL = "https://matchpilot-api.azurewebsites.net/api/match_resume?code=BbjFflucaJT6wlmDLKTGgQCe1Efy-GxZcw3t9L3SrFC-AzFulwOB8A==";
     const GET_RESUMES_API_URL = "https://matchpilot-api.azurewebsites.net/api/get_resumes?code=uhhWaNx9br_djyqwgTdsGnT_BrGO-9MAhmlWNcuh7qccAzFufxPzxg=="; 
     
+    // --- GLOBALS (Fixed scope issue) ---
+    const resultsDiv = document.getElementById("results");
     let currentUserId = null;
 
     // Toggle UI between Upload and Saved Dropdown
@@ -138,7 +140,7 @@
 
     // Submit form to backend
     document.getElementById("analyzeBtn").addEventListener("click", async () => {
-      const resultsDiv = document.getElementById("results");
+      // Clear old results and show loading state
       resultsDiv.innerHTML = `<div class="text-center text-indigo-600 font-semibold animate-pulse">⏳ Analyzing with AI...</div>`;
 
       const formData = new FormData();
