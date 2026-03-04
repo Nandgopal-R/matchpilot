@@ -11,26 +11,25 @@
 
     <h1 class="text-3xl font-bold text-indigo-600 text-center">MatchPilot</h1>
 
-    <!-- Upload UI (same as before) -->
+    <!-- Upload UI -->
     <label class="block">
       <span class="text-lg font-medium text-gray-700">Upload Resume (PDF)</span>
       <div id="dropZone"
-          class="mt-2 flex items-center justify-center h-36 border-2 border-dashed border-indigo-300 rounded-xl bg-indigo-50 hover:bg-indigo-100 transition">
-        <input type="file" id="resume" accept="application/pdf"
-            class="absolute opacity-0 h-full w-full cursor-pointer" />
-        <p class="text-gray-500">Drag & drop or click to upload</p>
+           class="mt-2 cursor-pointer flex items-center justify-center h-36 border-2 border-dashed border-indigo-300 rounded-xl bg-indigo-50 hover:bg-indigo-100 transition">
+        <p id="uploadText" class="text-gray-500">Drag & drop or click to upload</p>
       </div>
+      <input type="file" id="resume" accept="application/pdf" class="hidden" />
     </label>
 
     <div>
       <label class="block text-lg font-medium text-gray-700">Job Description (optional)</label>
       <textarea id="jobDesc"
-          class="mt-1 w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition"
-          rows="5" placeholder="Paste job description here..."></textarea>
+                class="mt-1 w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                rows="5" placeholder="Paste job description here..."></textarea>
     </div>
 
     <button id="analyzeBtn"
-        class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition">
+            class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition">
       Analyze
     </button>
 
@@ -41,16 +40,33 @@
 
   <script>
     const API_URL = "https://matchpilot-api.azurewebsites.net/api/match_resume?code=omb8jB8OQrEVj9DIKbp6ppw0ceACn4_9J6CW4n_U1of-AzFugUTc6w==";
-
     const resultsDiv = document.getElementById("results");
+    const dropZone = document.getElementById("dropZone");
+    const resumeInput = document.getElementById("resume");
+    const uploadText = document.getElementById("uploadText");
+
+    // Open file dialog on dropZone click
+    dropZone.addEventListener("click", () => {
+      resumeInput.click();
+    });
+
+    // Visual feedback: show selected filename
+    resumeInput.addEventListener("change", () => {
+      if (resumeInput.files && resumeInput.files.length > 0) {
+        uploadText.textContent = resumeInput.files[0].name;
+        uploadText.classList.remove("text-gray-500");
+        uploadText.classList.add("text-indigo-800", "font-semibold");
+      } else {
+        uploadText.textContent = "Drag & drop or click to upload";
+        uploadText.classList.remove("text-indigo-800", "font-semibold");
+        uploadText.classList.add("text-gray-500");
+      }
+    });
 
     document.getElementById("analyzeBtn").addEventListener("click", async () => {
       resultsDiv.innerHTML = "";
 
-      const fileInput = document.getElementById("resume");
-      const jobDesc = document.getElementById("jobDesc").value.trim();
-
-      if (!fileInput.files || fileInput.files.length === 0) {
+      if (!resumeInput.files || resumeInput.files.length === 0) {
         resultsDiv.innerHTML = `
           <div class="text-red-500 font-semibold text-center">⚠ Please upload a resume PDF.</div>
         `;
@@ -58,7 +74,8 @@
       }
 
       const formData = new FormData();
-      formData.append("resume", fileInput.files[0]);
+      formData.append("resume", resumeInput.files[0]);
+      const jobDesc = document.getElementById("jobDesc").value.trim();
       if (jobDesc) formData.append("job_desc", jobDesc);
 
       try {
@@ -92,8 +109,12 @@
       if (data.match_score !== undefined) {
         resultsDiv.innerHTML = `
           <div class="bg-white rounded-lg shadow p-6 space-y-4 transition">
-            <h2 class="text-2xl font-bold text-indigo-600">Match Score: <span class="text-indigo-800">${data.match_score}%</span></h2>
-            <p class="text-gray-700 font-medium">Hiring Verdict: <span class="font-semibold">${data.hiring_verdict}</span></p>
+            <h2 class="text-2xl font-bold text-indigo-600">
+              Match Score: <span class="text-indigo-800">${data.match_score}%</span>
+            </h2>
+            <p class="text-gray-700 font-medium">
+              Hiring Verdict: <span class="font-semibold">${data.hiring_verdict}</span>
+            </p>
             
             <div class="space-y-2">
               <h3 class="font-semibold text-gray-800">Missing Skills:</h3>
@@ -113,7 +134,9 @@
       else if (data.profile_score !== undefined) {
         resultsDiv.innerHTML = `
           <div class="bg-white rounded-lg shadow p-6 space-y-4 transition">
-            <h2 class="text-2xl font-bold text-indigo-600">Profile Score: <span class="text-indigo-800">${data.profile_score}%</span></h2>
+            <h2 class="text-2xl font-bold text-indigo-600">
+              Profile Score: <span class="text-indigo-800">${data.profile_score}%</span>
+            </h2>
 
             <div class="space-y-2">
               <h3 class="font-semibold text-gray-800">Recommended Roles:</h3>
