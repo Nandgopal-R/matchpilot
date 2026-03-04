@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MatchPilot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 flex justify-center items-start py-10">
+  <div class="bg-white shadow-xl rounded-xl max-w-xl w-full p-6 space-y-6">
+
+    <h1 class="text-3xl font-bold text-indigo-600 text-center">MatchPilot</h1>
+
+    <!-- Upload UI (same as before) -->
+    <label class="block">
+      <span class="text-lg font-medium text-gray-700">Upload Resume (PDF)</span>
+      <div id="dropZone"
+          class="mt-2 flex items-center justify-center h-36 border-2 border-dashed border-indigo-300 rounded-xl bg-indigo-50 hover:bg-indigo-100 transition">
+        <input type="file" id="resume" accept="application/pdf"
+            class="absolute opacity-0 h-full w-full cursor-pointer" />
+        <p class="text-gray-500">Drag & drop or click to upload</p>
+      </div>
+    </label>
+
+    <div>
+      <label class="block text-lg font-medium text-gray-700">Job Description (optional)</label>
+      <textarea id="jobDesc"
+          class="mt-1 w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition"
+          rows="5" placeholder="Paste job description here..."></textarea>
+    </div>
+
+    <button id="analyzeBtn"
+        class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition">
+      Analyze
+    </button>
+
+    <!-- Results Container -->
+    <div id="results" class="space-y-4"></div>
+
+  </div>
+
+  <script>
+    const API_URL = "http://localhost:7071/api/analyze_resume";
+
+    const resultsDiv = document.getElementById("results");
+
+    document.getElementById("analyzeBtn").addEventListener("click", async () => {
+      resultsDiv.innerHTML = "";
+
+      const fileInput = document.getElementById("resume");
+      const jobDesc = document.getElementById("jobDesc").value.trim();
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        resultsDiv.innerHTML = `
+          <div class="text-red-500 font-semibold text-center">⚠ Please upload a resume PDF.</div>
+        `;
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("resume", fileInput.files[0]);
+      if (jobDesc) formData.append("job_desc", jobDesc);
+
+      try {
+        resultsDiv.innerHTML = `<div class="text-center text-gray-700 font-semibold">⏳ Analyzing...</div>`;
+        const res = await fetch(API_URL, { method: "POST", body: formData });
+
+        if (!res.ok) {
+          const text = await res.text();
+          resultsDiv.innerHTML = `
+            <div class="text-red-600 font-semibold text-center">
+              ❌ Error: ${res.status} — ${text}
+            </div>
+          `;
+          return;
+        }
+
+        const data = await res.json();
+        renderResults(data);
+
+      } catch (err) {
+        resultsDiv.innerHTML = `
+          <div class="text-red-600 font-semibold text-center">❌ Network error: ${err.message}</div>
+        `;
+      }
+    });
+
+    function renderResults(data) {
+      resultsDiv.innerHTML = "";
+
+      // Recruiter / Match Mode
+      if (data.match_score !== undefined) {
+        resultsDiv.innerHTML = `
+          <div class="bg-white rounded-lg shadow p-6 space-y-4 transition">
+            <h2 class="text-2xl font-bold text-indigo-600">Match Score: <span class="text-indigo-800">${data.match_score}%</span></h2>
+            <p class="text-gray-700 font-medium">Hiring Verdict: <span class="font-semibold">${data.hiring_verdict}</span></p>
+            
+            <div class="space-y-2">
+              <h3 class="font-semibold text-gray-800">Missing Skills:</h3>
+              <ul class="list-disc list-inside text-gray-700">
+                ${data.missing_skills.map(skill => `<li>${skill}</li>`).join("")}
+              </ul>
+            </div>
+
+            <div class="bg-gray-100 p-4 rounded text-gray-700">
+              <p class="font-medium">Feedback:</p>
+              <p>${data.feedback}</p>
+            </div>
+          </div>
+        `;
+      }
+      // Coach / Navigator Mode
+      else if (data.profile_score !== undefined) {
+        resultsDiv.innerHTML = `
+          <div class="bg-white rounded-lg shadow p-6 space-y-4 transition">
+            <h2 class="text-2xl font-bold text-indigo-600">Profile Score: <span class="text-indigo-800">${data.profile_score}%</span></h2>
+
+            <div class="space-y-2">
+              <h3 class="font-semibold text-gray-800">Recommended Roles:</h3>
+              <ul class="list-disc list-inside text-gray-700">
+                ${data.recommended_roles.map(role => `<li>${role}</li>`).join("")}
+              </ul>
+            </div>
+
+            <div class="space-y-2">
+              <h3 class="font-semibold text-gray-800">Top Skills:</h3>
+              <ul class="list-disc list-inside text-gray-700">
+                ${data.top_skills.map(skill => `<li>${skill}</li>`).join("")}
+              </ul>
+            </div>
+
+            <div class="bg-gray-100 p-4 rounded text-gray-700">
+              <p class="font-medium">Improvement Tips:</p>
+              <p>${data.improvement_tips}</p>
+            </div>
+          </div>
+        `;
+      }
+      // Unknown response
+      else {
+        resultsDiv.innerHTML = `
+          <div class="text-center text-red-600">⚠ Unexpected response format</div>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>
