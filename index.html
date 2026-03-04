@@ -9,9 +9,18 @@
 <body class="bg-gray-50 flex justify-center items-start py-10">
   <div class="bg-white shadow-xl rounded-xl max-w-xl w-full p-6 space-y-6">
 
+    <div class="flex justify-between items-center bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+      <div id="userInfo" class="text-sm font-medium text-gray-700">
+        Status: <span class="text-gray-500">Not logged in</span>
+      </div>
+      <div id="authButtons" class="flex space-x-2">
+        <a href="/.auth/login/github" class="text-xs font-semibold bg-gray-800 text-white px-3 py-2 rounded shadow hover:bg-gray-900 transition">GitHub Login</a>
+        <a href="/.auth/login/aad" class="text-xs font-semibold bg-blue-600 text-white px-3 py-2 rounded shadow hover:bg-blue-700 transition">Microsoft Login</a>
+      </div>
+    </div>
+
     <h1 class="text-3xl font-bold text-indigo-600 text-center">MatchPilot</h1>
 
-    <!-- Upload UI -->
     <label class="block">
       <span class="text-lg font-medium text-gray-700">Upload Resume (PDF)</span>
       <div id="dropZone"
@@ -25,20 +34,45 @@
       <label class="block text-lg font-medium text-gray-700">Job Description (optional)</label>
       <textarea id="jobDesc"
                 class="mt-1 w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                rows="5" placeholder="Paste job description here..."></textarea>
+                rows="5" placeholder="Paste job description here for a Match Score. Leave blank for Career Advice."></textarea>
     </div>
 
     <button id="analyzeBtn"
-            class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition">
+            class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-indigo-700 transition">
       Analyze
     </button>
 
-    <!-- Results Container -->
     <div id="results" class="space-y-4"></div>
 
   </div>
 
   <script>
+    // --- 1. AUTHENTICATION LOGIC ---
+    async function checkAuthStatus() {
+      try {
+        const response = await fetch('/.auth/me');
+        const payload = await response.json();
+
+        if (payload.clientPrincipal) {
+          // User is logged in!
+          const userName = payload.clientPrincipal.userDetails;
+          const provider = payload.clientPrincipal.identityProvider;
+          
+          document.getElementById('userInfo').innerHTML = `👋 Welcome, <span class="font-bold text-indigo-700">${userName}</span>`;
+          document.getElementById('authButtons').innerHTML = `
+            <a href="/.auth/logout" class="text-xs font-semibold bg-red-500 text-white px-3 py-2 rounded shadow hover:bg-red-600 transition">Logout</a>
+          `;
+        }
+      } catch (err) {
+        console.log("Not logged in or running locally outside Azure SWA.");
+      }
+    }
+    
+    // Run auth check immediately on page load
+    checkAuthStatus();
+
+
+    // --- 2. MATCHPILOT LOGIC ---
     const API_URL = "https://matchpilot-api.azurewebsites.net/api/match_resume?code=omb8jB8OQrEVj9DIKbp6ppw0ceACn4_9J6CW4n_U1of-AzFugUTc6w==";
     const resultsDiv = document.getElementById("results");
     const dropZone = document.getElementById("dropZone");
@@ -75,17 +109,21 @@
 
       const formData = new FormData();
       formData.append("resume", resumeInput.files[0]);
+      
       const jobDesc = document.getElementById("jobDesc").value.trim();
-      if (jobDesc) formData.append("job_desc", jobDesc);
+      // FIXED: Changed "job_desc" to "jd" to match your Python backend!
+      if (jobDesc) {
+          formData.append("jd", jobDesc);
+      }
 
       try {
-        resultsDiv.innerHTML = `<div class="text-center text-gray-700 font-semibold">⏳ Analyzing...</div>`;
+        resultsDiv.innerHTML = `<div class="text-center text-indigo-600 font-semibold animate-pulse">⏳ Analyzing with AI...</div>`;
         const res = await fetch(API_URL, { method: "POST", body: formData });
 
         if (!res.ok) {
           const text = await res.text();
           resultsDiv.innerHTML = `
-            <div class="text-red-600 font-semibold text-center">
+            <div class="text-red-600 font-semibold text-center p-4 bg-red-50 rounded">
               ❌ Error: ${res.status} — ${text}
             </div>
           `;
@@ -97,7 +135,7 @@
 
       } catch (err) {
         resultsDiv.innerHTML = `
-          <div class="text-red-600 font-semibold text-center">❌ Network error: ${err.message}</div>
+          <div class="text-red-600 font-semibold text-center p-4 bg-red-50 rounded">❌ Network error: ${err.message}</div>
         `;
       }
     });
@@ -108,24 +146,24 @@
       // Recruiter / Match Mode
       if (data.match_score !== undefined) {
         resultsDiv.innerHTML = `
-          <div class="bg-white rounded-lg shadow p-6 space-y-4 transition">
+          <div class="bg-white rounded-lg shadow border border-gray-100 p-6 space-y-4 transition">
             <h2 class="text-2xl font-bold text-indigo-600">
               Match Score: <span class="text-indigo-800">${data.match_score}%</span>
             </h2>
-            <p class="text-gray-700 font-medium">
-              Hiring Verdict: <span class="font-semibold">${data.hiring_verdict}</span>
+            <p class="text-gray-700 font-medium text-lg border-b pb-2">
+              Hiring Verdict: <span class="font-bold ${data.hiring_verdict === 'Highly Likely' ? 'text-green-600' : 'text-yellow-600'}">${data.hiring_verdict}</span>
             </p>
             
             <div class="space-y-2">
               <h3 class="font-semibold text-gray-800">Missing Skills:</h3>
-              <ul class="list-disc list-inside text-gray-700">
-                ${data.missing_skills.map(skill => `<li>${skill}</li>`).join("")}
+              <ul class="list-disc list-inside text-gray-600 marker:text-indigo-400">
+                ${data.missing_skills.length > 0 ? data.missing_skills.map(skill => `<li>${skill}</li>`).join("") : '<li>None! Perfect match.</li>'}
               </ul>
             </div>
 
-            <div class="bg-gray-100 p-4 rounded text-gray-700">
-              <p class="font-medium">Feedback:</p>
-              <p>${data.feedback}</p>
+            <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 rounded text-gray-700">
+              <p class="font-bold text-indigo-900 mb-1">Recruiter Feedback:</p>
+              <p class="text-sm">${data.feedback}</p>
             </div>
           </div>
         `;
@@ -133,28 +171,28 @@
       // Coach / Navigator Mode
       else if (data.profile_score !== undefined) {
         resultsDiv.innerHTML = `
-          <div class="bg-white rounded-lg shadow p-6 space-y-4 transition">
+          <div class="bg-white rounded-lg shadow border border-gray-100 p-6 space-y-4 transition">
             <h2 class="text-2xl font-bold text-indigo-600">
-              Profile Score: <span class="text-indigo-800">${data.profile_score}%</span>
+              Profile Strength: <span class="text-indigo-800">${data.profile_score}%</span>
             </h2>
 
             <div class="space-y-2">
               <h3 class="font-semibold text-gray-800">Recommended Roles:</h3>
-              <ul class="list-disc list-inside text-gray-700">
-                ${data.recommended_roles.map(role => `<li>${role}</li>`).join("")}
-              </ul>
+              <div class="flex flex-wrap gap-2 mt-2">
+                ${data.recommended_roles.map(role => `<span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded">${role}</span>`).join("")}
+              </div>
             </div>
 
-            <div class="space-y-2">
-              <h3 class="font-semibold text-gray-800">Top Skills:</h3>
-              <ul class="list-disc list-inside text-gray-700">
+            <div class="space-y-2 mt-4">
+              <h3 class="font-semibold text-gray-800">Top Skills Identified:</h3>
+              <ul class="list-disc list-inside text-gray-600 marker:text-indigo-400">
                 ${data.top_skills.map(skill => `<li>${skill}</li>`).join("")}
               </ul>
             </div>
 
-            <div class="bg-gray-100 p-4 rounded text-gray-700">
-              <p class="font-medium">Improvement Tips:</p>
-              <p>${data.improvement_tips}</p>
+            <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 rounded text-gray-700 mt-4">
+              <p class="font-bold text-indigo-900 mb-1">Improvement Tip:</p>
+              <p class="text-sm">${data.improvement_tips}</p>
             </div>
           </div>
         `;
@@ -162,7 +200,7 @@
       // Unknown response
       else {
         resultsDiv.innerHTML = `
-          <div class="text-center text-red-600">⚠ Unexpected response format</div>
+          <div class="text-center text-red-600 p-4 bg-red-50 rounded">⚠ Unexpected response format from AI.</div>
         `;
       }
     }
