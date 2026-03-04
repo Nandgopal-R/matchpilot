@@ -21,28 +21,34 @@
 
     <h1 class="text-3xl font-bold text-indigo-600 text-center">MatchPilot</h1>
 
-    <label class="block">
-      <span class="text-lg font-medium text-gray-700">Upload Resume (PDF)</span>
-      <div id="dropZone"
-           class="mt-2 cursor-pointer flex items-center justify-center h-36 border-2 border-dashed border-indigo-300 rounded-xl bg-indigo-50 hover:bg-indigo-100 transition">
-        <p id="uploadText" class="text-gray-500">Drag & drop or click to upload</p>
-      </div>
-      <input type="file" id="resume" accept="application/pdf" class="hidden" />
-    </label>
-
-    <div>
-      <label class="block text-lg font-medium text-gray-700">Job Description (optional)</label>
-      <textarea id="jobDesc"
-                class="mt-1 w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                rows="5" placeholder="Paste job description here for a Match Score. Leave blank for Career Advice."></textarea>
+    <div id="loginPrompt" class="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+      <p class="text-gray-600 font-medium">Please log in using GitHub or Microsoft to unlock the AI Resume Analyzer.</p>
     </div>
 
-    <button id="analyzeBtn"
-            class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-indigo-700 transition">
-      Analyze
-    </button>
+    <div id="analyzerTool" class="hidden space-y-6">
+      <label class="block">
+        <span class="text-lg font-medium text-gray-700">Upload Resume (PDF)</span>
+        <div id="dropZone"
+             class="mt-2 cursor-pointer flex items-center justify-center h-36 border-2 border-dashed border-indigo-300 rounded-xl bg-indigo-50 hover:bg-indigo-100 transition">
+          <p id="uploadText" class="text-gray-500">Drag & drop or click to upload</p>
+        </div>
+        <input type="file" id="resume" accept="application/pdf" class="hidden" />
+      </label>
 
-    <div id="results" class="space-y-4"></div>
+      <div>
+        <label class="block text-lg font-medium text-gray-700">Job Description (optional)</label>
+        <textarea id="jobDesc"
+                  class="mt-1 w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                  rows="5" placeholder="Paste job description here for a Match Score. Leave blank for Career Advice."></textarea>
+      </div>
+
+      <button id="analyzeBtn"
+              class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-indigo-700 transition">
+        Analyze
+      </button>
+
+      <div id="results" class="space-y-4"></div>
+    </div>
 
   </div>
 
@@ -54,17 +60,28 @@
         const payload = await response.json();
 
         if (payload.clientPrincipal) {
-          // User is logged in!
+          // User IS logged in!
           const userName = payload.clientPrincipal.userDetails;
-          const provider = payload.clientPrincipal.identityProvider;
           
+          // Update the header
           document.getElementById('userInfo').innerHTML = `👋 Welcome, <span class="font-bold text-indigo-700">${userName}</span>`;
           document.getElementById('authButtons').innerHTML = `
             <a href="/.auth/logout" class="text-xs font-semibold bg-red-500 text-white px-3 py-2 rounded shadow hover:bg-red-600 transition">Logout</a>
           `;
+
+          // Hide the login prompt and SHOW the analyzer tool
+          document.getElementById('loginPrompt').classList.add('hidden');
+          document.getElementById('analyzerTool').classList.remove('hidden');
+        } else {
+          // User is NOT logged in (or we are on localhost)
+          document.getElementById('loginPrompt').classList.remove('hidden');
+          document.getElementById('analyzerTool').classList.add('hidden');
         }
       } catch (err) {
         console.log("Not logged in or running locally outside Azure SWA.");
+        // Ensure prompt shows if fetch fails
+        document.getElementById('loginPrompt').classList.remove('hidden');
+        document.getElementById('analyzerTool').classList.add('hidden');
       }
     }
     
@@ -111,7 +128,6 @@
       formData.append("resume", resumeInput.files[0]);
       
       const jobDesc = document.getElementById("jobDesc").value.trim();
-      // FIXED: Changed "job_desc" to "jd" to match your Python backend!
       if (jobDesc) {
           formData.append("jd", jobDesc);
       }
