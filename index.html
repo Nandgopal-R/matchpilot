@@ -22,204 +22,192 @@
     <h1 class="text-3xl font-bold text-indigo-600 text-center">MatchPilot</h1>
 
     <div id="loginPrompt" class="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-      <p class="text-gray-600 font-medium">Please log in using GitHub or Microsoft to unlock the AI Resume Analyzer.</p>
+      <p class="text-gray-600 font-medium">Please log in to unlock the AI Resume Analyzer and access your saved files.</p>
     </div>
 
     <div id="analyzerTool" class="hidden space-y-6">
-      <label class="block">
-        <span class="text-lg font-medium text-gray-700">Upload Resume (PDF)</span>
-        <div id="dropZone"
-             class="mt-2 cursor-pointer flex items-center justify-center h-36 border-2 border-dashed border-indigo-300 rounded-xl bg-indigo-50 hover:bg-indigo-100 transition">
+      
+      <div class="flex space-x-4 mb-4 border-b pb-4">
+        <label class="flex items-center space-x-2 cursor-pointer">
+          <input type="radio" name="resumeSource" value="upload" checked onchange="toggleResumeSource()" class="text-indigo-600 focus:ring-indigo-500">
+          <span class="text-gray-700 font-medium">Upload New</span>
+        </label>
+        <label class="flex items-center space-x-2 cursor-pointer">
+          <input type="radio" name="resumeSource" value="saved" onchange="toggleResumeSource()" class="text-indigo-600 focus:ring-indigo-500">
+          <span class="text-gray-700 font-medium">Use Saved</span>
+        </label>
+      </div>
+
+      <label id="uploadSection" class="block">
+        <div id="dropZone" class="cursor-pointer flex items-center justify-center h-32 border-2 border-dashed border-indigo-300 rounded-xl bg-indigo-50 hover:bg-indigo-100 transition">
           <p id="uploadText" class="text-gray-500">Drag & drop or click to upload</p>
         </div>
         <input type="file" id="resume" accept="application/pdf" class="hidden" />
       </label>
 
-      <div>
-        <label class="block text-lg font-medium text-gray-700">Job Description (optional)</label>
-        <textarea id="jobDesc"
-                  class="mt-1 w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                  rows="5" placeholder="Paste job description here for a Match Score. Leave blank for Career Advice."></textarea>
+      <div id="savedSection" class="hidden">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Select a previously uploaded resume:</label>
+        <select id="savedResumesDropdown" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition">
+          <option value="">Loading your resumes...</option>
+        </select>
       </div>
 
-      <button id="analyzeBtn"
-              class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-indigo-700 transition">
-        Analyze
-      </button>
-
+      <div>
+        <label class="block text-lg font-medium text-gray-700">Job Description (optional)</label>
+        <textarea id="jobDesc" class="mt-1 w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition" rows="5" placeholder="Paste JD here for a Match Score. Leave blank for Career Advice."></textarea>
+      </div>
+      
+      <button id="analyzeBtn" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-indigo-700 transition">Analyze</button>
+      
       <div id="results" class="space-y-4"></div>
     </div>
 
   </div>
 
   <script>
-    // --- 1. AUTHENTICATION LOGIC ---
+    // --- FILL THESE IN BEFORE DEPLOYING! ---
+    const MATCH_API_URL = "https://matchpilot-api.azurewebsites.net/api/match_resume?code=BbjFflucaJT6wlmDLKTGgQCe1Efy-GxZcw3t9L3SrFC-AzFulwOB8A==";
+    const GET_RESUMES_API_URL = "https://matchpilot-api.azurewebsites.net/api/get_resumes?code=uhhWaNx9br_djyqwgTdsGnT_BrGO-9MAhmlWNcuh7qccAzFufxPzxg=="; 
+    
+    let currentUserId = null;
+
+    // Toggle UI between Upload and Saved Dropdown
+    function toggleResumeSource() {
+      const source = document.querySelector('input[name="resumeSource"]:checked').value;
+      if (source === 'upload') {
+        document.getElementById('uploadSection').classList.remove('hidden');
+        document.getElementById('savedSection').classList.add('hidden');
+      } else {
+        document.getElementById('uploadSection').classList.add('hidden');
+        document.getElementById('savedSection').classList.remove('hidden');
+      }
+    }
+
+    // Handle visual feedback for file upload
+    const dropZone = document.getElementById("dropZone");
+    const resumeInput = document.getElementById("resume");
+    const uploadText = document.getElementById("uploadText");
+
+    dropZone.addEventListener("click", () => resumeInput.click());
+    resumeInput.addEventListener("change", () => {
+      if (resumeInput.files.length > 0) {
+        uploadText.textContent = resumeInput.files[0].name;
+        uploadText.classList.add("text-indigo-800", "font-semibold");
+      }
+    });
+
+    // Check Login Status & Fetch Resumes
     async function checkAuthStatus() {
       try {
         const response = await fetch('/.auth/me');
         const payload = await response.json();
 
         if (payload.clientPrincipal) {
-          // User IS logged in!
+          currentUserId = payload.clientPrincipal.userId; // Secret ID used for folder isolation
           const userName = payload.clientPrincipal.userDetails;
-          
-          // Update the header
-          document.getElementById('userInfo').innerHTML = `👋 Welcome, <span class="font-bold text-indigo-700">${userName}</span>`;
-          document.getElementById('authButtons').innerHTML = `
-            <a href="/.auth/logout" class="text-xs font-semibold bg-red-500 text-white px-3 py-2 rounded shadow hover:bg-red-600 transition">Logout</a>
-          `;
 
-          // Hide the login prompt and SHOW the analyzer tool
+          document.getElementById('userInfo').innerHTML = `👋 Welcome, <span class="font-bold text-indigo-700">${userName}</span>`;
+          document.getElementById('authButtons').innerHTML = `<a href="/.auth/logout" class="text-xs font-semibold bg-red-500 text-white px-3 py-2 rounded shadow hover:bg-red-600 transition">Logout</a>`;
+          
           document.getElementById('loginPrompt').classList.add('hidden');
           document.getElementById('analyzerTool').classList.remove('hidden');
-        } else {
-          // User is NOT logged in (or we are on localhost)
-          document.getElementById('loginPrompt').classList.remove('hidden');
-          document.getElementById('analyzerTool').classList.add('hidden');
+          
+          fetchSavedResumes();
         }
       } catch (err) {
-        console.log("Not logged in or running locally outside Azure SWA.");
-        // Ensure prompt shows if fetch fails
-        document.getElementById('loginPrompt').classList.remove('hidden');
-        document.getElementById('analyzerTool').classList.add('hidden');
+        console.log("User not logged in.");
       }
     }
-    
-    // Run auth check immediately on page load
-    checkAuthStatus();
 
-
-    // --- 2. MATCHPILOT LOGIC ---
-    const API_URL = "https://matchpilot-api.azurewebsites.net/api/match_resume?code=omb8jB8OQrEVj9DIKbp6ppw0ceACn4_9J6CW4n_U1of-AzFugUTc6w==";
-    const resultsDiv = document.getElementById("results");
-    const dropZone = document.getElementById("dropZone");
-    const resumeInput = document.getElementById("resume");
-    const uploadText = document.getElementById("uploadText");
-
-    // Open file dialog on dropZone click
-    dropZone.addEventListener("click", () => {
-      resumeInput.click();
-    });
-
-    // Visual feedback: show selected filename
-    resumeInput.addEventListener("change", () => {
-      if (resumeInput.files && resumeInput.files.length > 0) {
-        uploadText.textContent = resumeInput.files[0].name;
-        uploadText.classList.remove("text-gray-500");
-        uploadText.classList.add("text-indigo-800", "font-semibold");
-      } else {
-        uploadText.textContent = "Drag & drop or click to upload";
-        uploadText.classList.remove("text-indigo-800", "font-semibold");
-        uploadText.classList.add("text-gray-500");
+    async function fetchSavedResumes() {
+      try {
+        const res = await fetch(`${GET_RESUMES_API_URL}&user_id=${currentUserId}`);
+        const data = await res.json();
+        const dropdown = document.getElementById('savedResumesDropdown');
+        
+        if (data.resumes && data.resumes.length > 0) {
+          dropdown.innerHTML = `<option value="">-- Choose a resume --</option>` + 
+                               data.resumes.map(r => `<option value="${r}">${r}</option>`).join('');
+        } else {
+          dropdown.innerHTML = `<option value="">No saved resumes found. Upload one first!</option>`;
+        }
+      } catch (e) {
+        document.getElementById('savedResumesDropdown').innerHTML = `<option value="">Error loading resumes.</option>`;
       }
-    });
+    }
 
+    // Submit form to backend
     document.getElementById("analyzeBtn").addEventListener("click", async () => {
-      resultsDiv.innerHTML = "";
-
-      if (!resumeInput.files || resumeInput.files.length === 0) {
-        resultsDiv.innerHTML = `
-          <div class="text-red-500 font-semibold text-center">⚠ Please upload a resume PDF.</div>
-        `;
-        return;
-      }
+      const resultsDiv = document.getElementById("results");
+      resultsDiv.innerHTML = `<div class="text-center text-indigo-600 font-semibold animate-pulse">⏳ Analyzing with AI...</div>`;
 
       const formData = new FormData();
-      formData.append("resume", resumeInput.files[0]);
-      
-      const jobDesc = document.getElementById("jobDesc").value.trim();
-      if (jobDesc) {
-          formData.append("jd", jobDesc);
+      formData.append("user_id", currentUserId);
+
+      // Append either the file or the saved filename
+      const source = document.querySelector('input[name="resumeSource"]:checked').value;
+      if (source === 'upload') {
+        if (!resumeInput.files.length) return resultsDiv.innerHTML = `<div class="text-red-500 font-semibold text-center p-4 bg-red-50 rounded">⚠ Please upload a PDF file.</div>`;
+        formData.append("resume", resumeInput.files[0]);
+      } else {
+        const dropdown = document.getElementById("savedResumesDropdown");
+        if (!dropdown.value) return resultsDiv.innerHTML = `<div class="text-red-500 font-semibold text-center p-4 bg-red-50 rounded">⚠ Please select a saved resume.</div>`;
+        formData.append("saved_resume", dropdown.value);
       }
 
+      // Append Job Description
+      const jobDesc = document.getElementById("jobDesc").value.trim();
+      if (jobDesc) formData.append("jd", jobDesc);
+
       try {
-        resultsDiv.innerHTML = `<div class="text-center text-indigo-600 font-semibold animate-pulse">⏳ Analyzing with AI...</div>`;
-        const res = await fetch(API_URL, { method: "POST", body: formData });
-
-        if (!res.ok) {
-          const text = await res.text();
-          resultsDiv.innerHTML = `
-            <div class="text-red-600 font-semibold text-center p-4 bg-red-50 rounded">
-              ❌ Error: ${res.status} — ${text}
-            </div>
-          `;
-          return;
-        }
-
+        const res = await fetch(MATCH_API_URL, { method: "POST", body: formData });
+        if (!res.ok) throw new Error(await res.text());
+        
         const data = await res.json();
         renderResults(data);
-
+        
+        // If they uploaded a new file, refresh the dropdown so it shows up next time!
+        if (source === 'upload') fetchSavedResumes(); 
+        
       } catch (err) {
-        resultsDiv.innerHTML = `
-          <div class="text-red-600 font-semibold text-center p-4 bg-red-50 rounded">❌ Network error: ${err.message}</div>
-        `;
+        resultsDiv.innerHTML = `<div class="text-red-600 font-semibold text-center p-4 bg-red-50 rounded">❌ Error: ${err.message}</div>`;
       }
     });
 
     function renderResults(data) {
       resultsDiv.innerHTML = "";
-
-      // Recruiter / Match Mode
       if (data.match_score !== undefined) {
         resultsDiv.innerHTML = `
           <div class="bg-white rounded-lg shadow border border-gray-100 p-6 space-y-4 transition">
-            <h2 class="text-2xl font-bold text-indigo-600">
-              Match Score: <span class="text-indigo-800">${data.match_score}%</span>
-            </h2>
-            <p class="text-gray-700 font-medium text-lg border-b pb-2">
-              Hiring Verdict: <span class="font-bold ${data.hiring_verdict === 'Highly Likely' ? 'text-green-600' : 'text-yellow-600'}">${data.hiring_verdict}</span>
-            </p>
-            
-            <div class="space-y-2">
-              <h3 class="font-semibold text-gray-800">Missing Skills:</h3>
-              <ul class="list-disc list-inside text-gray-600 marker:text-indigo-400">
+            <h2 class="text-2xl font-bold text-indigo-600">Match Score: <span class="text-indigo-800">${data.match_score}%</span></h2>
+            <p class="text-gray-700 font-medium text-lg border-b pb-2">Hiring Verdict: <span class="font-bold ${data.hiring_verdict === 'Highly Likely' ? 'text-green-600' : 'text-yellow-600'}">${data.hiring_verdict}</span></p>
+            <div class="space-y-2"><h3 class="font-semibold text-gray-800">Missing Skills:</h3><ul class="list-disc list-inside text-gray-600 marker:text-indigo-400">
                 ${data.missing_skills.length > 0 ? data.missing_skills.map(skill => `<li>${skill}</li>`).join("") : '<li>None! Perfect match.</li>'}
-              </ul>
-            </div>
-
+            </ul></div>
             <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 rounded text-gray-700">
-              <p class="font-bold text-indigo-900 mb-1">Recruiter Feedback:</p>
-              <p class="text-sm">${data.feedback}</p>
+              <p class="font-bold text-indigo-900 mb-1">Recruiter Feedback:</p><p class="text-sm">${data.feedback}</p>
             </div>
-          </div>
-        `;
-      }
-      // Coach / Navigator Mode
-      else if (data.profile_score !== undefined) {
+          </div>`;
+      } else if (data.profile_score !== undefined) {
         resultsDiv.innerHTML = `
           <div class="bg-white rounded-lg shadow border border-gray-100 p-6 space-y-4 transition">
-            <h2 class="text-2xl font-bold text-indigo-600">
-              Profile Strength: <span class="text-indigo-800">${data.profile_score}%</span>
-            </h2>
-
-            <div class="space-y-2">
-              <h3 class="font-semibold text-gray-800">Recommended Roles:</h3>
-              <div class="flex flex-wrap gap-2 mt-2">
+            <h2 class="text-2xl font-bold text-indigo-600">Profile Strength: <span class="text-indigo-800">${data.profile_score}%</span></h2>
+            <div class="space-y-2"><h3 class="font-semibold text-gray-800">Recommended Roles:</h3><div class="flex flex-wrap gap-2 mt-2">
                 ${data.recommended_roles.map(role => `<span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded">${role}</span>`).join("")}
-              </div>
-            </div>
-
-            <div class="space-y-2 mt-4">
-              <h3 class="font-semibold text-gray-800">Top Skills Identified:</h3>
-              <ul class="list-disc list-inside text-gray-600 marker:text-indigo-400">
+            </div></div>
+            <div class="space-y-2 mt-4"><h3 class="font-semibold text-gray-800">Top Skills Identified:</h3><ul class="list-disc list-inside text-gray-600 marker:text-indigo-400">
                 ${data.top_skills.map(skill => `<li>${skill}</li>`).join("")}
-              </ul>
-            </div>
-
+            </ul></div>
             <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 rounded text-gray-700 mt-4">
-              <p class="font-bold text-indigo-900 mb-1">Improvement Tip:</p>
-              <p class="text-sm">${data.improvement_tips}</p>
+              <p class="font-bold text-indigo-900 mb-1">Improvement Tip:</p><p class="text-sm">${data.improvement_tips}</p>
             </div>
-          </div>
-        `;
-      }
-      // Unknown response
-      else {
-        resultsDiv.innerHTML = `
-          <div class="text-center text-red-600 p-4 bg-red-50 rounded">⚠ Unexpected response format from AI.</div>
-        `;
+          </div>`;
+      } else {
+        resultsDiv.innerHTML = `<div class="text-center text-red-600 p-4 bg-red-50 rounded">⚠ Unexpected response format from AI.</div>`;
       }
     }
+
+    checkAuthStatus();
   </script>
 </body>
 </html>
