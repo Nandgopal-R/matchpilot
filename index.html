@@ -55,6 +55,8 @@
           </button>
         </div>
 
+        <div id="searchStatus" class="hidden text-sm font-medium mt-1"></div>
+
         <select id="savedResumesDropdown" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition">
           <option value="">Loading your resumes...</option>
         </select>
@@ -148,31 +150,53 @@
       }
     }
 
-    // --- NEW: SEARCH LOGIC ---
+    // --- NEW: IMPROVED SEARCH LOGIC ---
     document.getElementById("searchBtn").addEventListener("click", async () => {
       const query = document.getElementById("searchInput").value.trim();
       const dropdown = document.getElementById('savedResumesDropdown');
+      const statusText = document.getElementById('searchStatus');
 
-      // If search bar is empty, just fetch all resumes again
+      // If search bar is empty, hide status and fetch all resumes
       if (!query) {
+        statusText.classList.add("hidden");
         fetchSavedResumes();
         return;
       }
 
-      dropdown.innerHTML = `<option value="">🔍 Searching...</option>`;
+      // Show loading status
+      statusText.classList.remove("hidden");
+      statusText.className = "text-sm text-indigo-600 font-medium mt-2 animate-pulse";
+      statusText.innerHTML = `⏳ Searching your resumes for "${query}"...`;
+      dropdown.innerHTML = `<option value="">Searching...</option>`;
 
       try {
         const res = await fetch(`${SEARCH_API_URL}&user_id=${currentUserId}&query=${encodeURIComponent(query)}`);
         const data = await res.json();
         
+        statusText.classList.remove("animate-pulse");
+
         if (data.matches && data.matches.length > 0) {
+          // Success UI
+          statusText.className = "text-sm text-green-600 font-medium mt-2";
+          statusText.innerHTML = `✅ Found <strong>${data.matches.length}</strong> resume(s) matching "${query}". Please select one below:`;
+          
+          // Populate Dropdown
           dropdown.innerHTML = `<option value="">-- Choose a matched resume --</option>` + 
                                data.matches.map(r => `<option value="${r}">${r}</option>`).join('');
         } else {
-          dropdown.innerHTML = `<option value="">No matching resumes found for "${query}"</option>`;
+          // No Matches UI
+          statusText.className = "text-sm text-yellow-600 font-medium mt-2";
+          statusText.innerHTML = `⚠ No resumes found containing "${query}". Showing all resumes.`;
+          
+          // Fetch all resumes back so they aren't stuck with an empty dropdown
+          fetchSavedResumes(); 
         }
       } catch (e) {
-        dropdown.innerHTML = `<option value="">❌ Error searching resumes.</option>`;
+        // Error UI
+        statusText.classList.remove("animate-pulse");
+        statusText.className = "text-sm text-red-600 font-medium mt-2";
+        statusText.innerHTML = `❌ Error searching resumes. Showing all resumes.`;
+        fetchSavedResumes();
       }
     });
 
@@ -214,8 +238,8 @@
         // Refresh dropdown if a new file was uploaded
         if (source === 'upload') {
             fetchSavedResumes(); 
-            // Also clear search bar if they were searching before
             document.getElementById("searchInput").value = ""; 
+            document.getElementById("searchStatus").classList.add("hidden");
         }
         
       } catch (err) {
