@@ -150,7 +150,7 @@
       }
     }
 
-    // --- NEW: IMPROVED SEARCH LOGIC ---
+    // --- NEW: STRICTER ERROR HANDLING IN SEARCH LOGIC ---
     document.getElementById("searchBtn").addEventListener("click", async () => {
       const query = document.getElementById("searchInput").value.trim();
       const dropdown = document.getElementById('savedResumesDropdown');
@@ -171,8 +171,20 @@
 
       try {
         const res = await fetch(`${SEARCH_API_URL}&user_id=${currentUserId}&query=${encodeURIComponent(query)}`);
-        const data = await res.json();
         
+        // 🚨 THIS IS THE CRITICAL FIX: If Python crashes, print the EXACT reason.
+        if (!res.ok) {
+            let errorMsg = `Server Error ${res.status}`;
+            try {
+                const errData = await res.json();
+                errorMsg = errData.error || errorMsg;
+            } catch(e) {
+                errorMsg = await res.text();
+            }
+            throw new Error(errorMsg);
+        }
+
+        const data = await res.json();
         statusText.classList.remove("animate-pulse");
 
         if (data.matches && data.matches.length > 0) {
@@ -187,15 +199,13 @@
           // No Matches UI
           statusText.className = "text-sm text-yellow-600 font-medium mt-2";
           statusText.innerHTML = `⚠ No resumes found containing "${query}". Showing all resumes.`;
-          
-          // Fetch all resumes back so they aren't stuck with an empty dropdown
           fetchSavedResumes(); 
         }
       } catch (e) {
-        // Error UI
+        // 🚨 Error UI now displays the exact backend failure!
         statusText.classList.remove("animate-pulse");
-        statusText.className = "text-sm text-red-600 font-medium mt-2";
-        statusText.innerHTML = `❌ Error searching resumes. Showing all resumes.`;
+        statusText.className = "text-sm text-red-600 font-medium mt-2 p-2 bg-red-50 rounded border border-red-200";
+        statusText.innerHTML = `❌ <strong>Search Failed:</strong> ${e.message}`;
         fetchSavedResumes();
       }
     });
